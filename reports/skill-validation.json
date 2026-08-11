@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "skill": "capture-spa-keypoints",
+  "preflight": {
+    "passed": true,
+    "nodeVersion": "v24.18.0",
+    "scenarioPresent": true,
+    "dependenciesPresent": true,
+    "outputWritable": true
+  },
+  "quickValidate": {
+    "passed": true,
+    "message": "Skill is valid!"
+  },
+  "forwardTest": {
+    "passed": true,
+    "browserLaunched": false,
+    "issueFound": "Direct PowerShell script invocation can be blocked by execution policy",
+    "resolution": "Skill now requires process-scoped -ExecutionPolicy Bypass and does not change machine policy"
+  }
+}

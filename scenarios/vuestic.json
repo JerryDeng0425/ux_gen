@@ -1,0 +1,52 @@
+{
+  "id": "vuestic-admin",
+  "version": "1.0.0",
+  "startUrl": "https://admin-demo.vuestic.dev/dashboard",
+  "captureMode": "exact",
+  "hotkey": "Ctrl+Shift+Y",
+  "outputDir": "artifacts",
+  "keypoints": [
+    {
+      "id": "K01",
+      "name": "Dashboard 首屏",
+      "instruction": "等待 Dashboard 标题、统计卡片和图表出现，然后按 Ctrl+Shift+Y。",
+      "assertions": [
+        { "type": "url", "includes": "/dashboard" },
+        { "type": "text", "selector": "h1", "includes": "Dashboard" },
+        { "type": "text", "selector": "body", "includes": "Revenue Report" }
+      ],
+      "maskSelectors": [".notification-dropdown"]
+    },
+    {
+      "id": "K02",
+      "name": "Users 筛选与排序",
+      "instruction": "进入 Users，在 Search 输入 Test，并点击 Full Name 表头排序一次，然后捕获。",
+      "assertions": [
+        { "type": "url", "includes": "/users" },
+        { "type": "value", "selector": "input[placeholder='Search']", "equals": "Test" },
+        { "type": "text", "selector": "table", "includes": "TestUser" }
+      ]
+    },
+    {
+      "id": "K03",
+      "name": "用户编辑弹窗草稿",
+      "instruction": "在筛选后的第一行打开 Edit user，把 Full name 改为 Snapshot User，把 Notes 改为 unsaved snapshot draft，不保存并捕获。",
+      "assertions": [
+        { "type": "url", "includes": "/users" },
+        { "type": "exists", "selector": "[role='dialog']" },
+        { "type": "value", "selector": "[role='dialog'] input[type='text']", "equals": "Snapshot User" },
+        { "type": "value", "selector": "[role='dialog'] textarea", "equals": "unsaved snapshot draft" }
+      ]
+    },
+    {
+      "id": "K04",
+      "name": "Settings 深色主题与偏好",
+      "instruction": "关闭弹窗，进入 Application settings，点击 Dark，并确保 General preferences 的第一个开关为开启状态，然后捕获。",
+      "assertions": [
+        { "type": "url", "includes": "/settings" },
+        { "type": "text", "selector": "h1", "includes": "Settings" },
+        { "type": "checked", "selector": ".va-switch__input", "equals": true }
+      ]
+    }
+  ]
+}

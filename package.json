@@ -1,0 +1,39 @@
+{
+  "name": "spa-keypoint-snapshot",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "spa-snapshot": "dist/src/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "snapshot": "tsx src/cli.ts",
+    "validate": "tsx src/cli.ts validate",
+    "test": "playwright test",
+    "test:unit": "playwright test tests/unit",
+    "test:integration": "playwright test tests/integration",
+    "acceptance": "tsx src/acceptance.ts",
+    "acceptance:vuestic": "tsx src/acceptance-vuestic.ts"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "ajv": "8.20.0",
+    "pixelmatch": "7.1.0",
+    "playwright": "1.55.1",
+    "pngjs": "7.0.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.55.1",
+    "@types/node": "24.3.0",
+    "@types/pngjs": "6.0.5",
+    "@vitejs/plugin-vue": "6.0.1",
+    "tsx": "4.20.5",
+    "typescript": "5.9.2",
+    "vite": "7.3.6",
+    "vue": "3.5.20"
+  }
+}

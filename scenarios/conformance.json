@@ -1,0 +1,46 @@
+{
+  "id": "conformance-spa",
+  "version": "1.0.0",
+  "startUrl": "http://127.0.0.1:4173/#/dashboard",
+  "captureMode": "exact",
+  "hotkey": "Ctrl+Shift+Y",
+  "keypoints": [
+    {
+      "id": "K01",
+      "name": "Dashboard ready",
+      "instruction": "Wait for dashboard statistics and canvases",
+      "assertions": [
+        { "type": "url", "includes": "#/dashboard" },
+        { "type": "text", "selector": "[data-testid=dashboard]", "includes": "statistics ready" }
+      ]
+    },
+    {
+      "id": "K02",
+      "name": "Users edited",
+      "instruction": "Fill the users form",
+      "assertions": [
+        { "type": "url", "includes": "#/users" },
+        { "type": "value", "selector": "#name", "equals": "Ada Lovelace" }
+      ]
+    },
+    {
+      "id": "K03",
+      "name": "Dialog draft",
+      "instruction": "Open the dialog and edit its draft without submitting",
+      "assertions": [
+        { "type": "exists", "selector": "#edit-dialog[open]" },
+        { "type": "value", "selector": "#dialog-value", "equals": "unsaved draft" }
+      ]
+    },
+    {
+      "id": "K04",
+      "name": "Dark preferences",
+      "instruction": "Switch the preferences theme to dark",
+      "assertions": [
+        { "type": "url", "includes": "#/preferences" },
+        { "type": "text", "selector": "#theme-value", "includes": "dark" },
+        { "type": "attribute", "selector": "[data-testid=app-root]", "name": "class", "equals": "app theme-dark" }
+      ]
+    }
+  ]
+}
