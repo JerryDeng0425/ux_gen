@@ -1,0 +1,9 @@
+html, body { margin: 0; font-family: system-ui, sans-serif; }
+.app { padding: 24px; min-height: 900px; }
+.theme-dark { background: #15202b; color: #fff; }
+nav { display: flex; gap: 16px; }
+section { display: grid; gap: 12px; max-width: 640px; margin-top: 24px; }
+label { display: grid; gap: 4px; }
+#scroll-box { width: 240px; height: 80px; overflow: auto; margin-top: 24px; border: 1px solid; }
+.scroll-content { width: 600px; height: 300px; padding: 12px; }
+dialog[open] { display: grid; gap: 12px; }

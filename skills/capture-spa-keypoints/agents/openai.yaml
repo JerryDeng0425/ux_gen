@@ -1,0 +1,4 @@
+interface:
+  display_name: "Capture SPA Keypoints"
+  short_description: "Capture and validate rendered SPA DOM snapshots"
+  default_prompt: "Use $capture-spa-keypoints to launch Vuestic Admin and guide a DOM snapshot run."
