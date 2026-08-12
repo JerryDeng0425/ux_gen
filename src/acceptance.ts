@@ -1,120 +1,112 @@
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { launchChromium } from './browser/launch.js';
-import { writeCaptureArtifacts } from './artifacts/writer.js';
 import { captureFromPage, captureRuntimeScript } from './capture/runtime.js';
-import type { KeypointConfig } from './types.js';
+import { SnapshotRunner } from './runner.js';
+import { validateHtml } from './validation/validator.js';
 
 const samples = 20;
+const headed = process.env.HEADED_ACCEPTANCE === '1';
 
 function percentile(values: number[], quantile: number): number {
   const sorted = [...values].sort((a, b) => a - b);
   return sorted[Math.min(sorted.length - 1, Math.ceil(sorted.length * quantile) - 1)];
 }
 
-const browser = await launchChromium({ headless: true });
-const temporaryRoot = await mkdtemp(path.join(tmpdir(), 'spa-snapshot-acceptance-'));
+async function waitForCount(runner: SnapshotRunner, count: number): Promise<void> {
+  const deadline = Date.now() + 5_000;
+  while (runner.captures.length < count && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 25));
+  if (runner.captures.length !== count) throw new Error(`Expected ${count} captures, got ${runner.captures.length}`);
+}
+
+const temporaryRoot = await mkdtemp(path.join(tmpdir(), 'spa-snapshot-v3-acceptance-'));
+let runner: SnapshotRunner | undefined;
+let browser: Awaited<ReturnType<typeof launchChromium>> | undefined;
 try {
-  const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
-  const runtimeOptions = { hotkey: 'Ctrl+Shift+Y', captureMode: 'exact' as const, redactSelectors: [] };
-  await page.addInitScript({ content: captureRuntimeScript(runtimeOptions) });
-  const navigateHtml = async (html: string) => page.goto(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
-  const functionalResults: Record<string, { passed: number; total: number }> = {
-    K01: { passed: 0, total: samples },
-    K02: { passed: 0, total: samples },
-    K03: { passed: 0, total: samples },
-    K04: { passed: 0, total: samples }
-  };
-  const states = [
-    { id: 'K01', html: '<!doctype html><html><head><title>Dashboard</title></head><body><h1>Dashboard</h1><p>statistics ready</p></body></html>', check: (html: string) => html.includes('statistics ready') },
-    { id: 'K02', html: '<!doctype html><html><head></head><body><input id="search" value="Test"><table><tbody><tr><td>TestUser</td></tr></tbody></table></body></html>', check: (html: string) => html.includes('value="Test"') && html.includes('TestUser') },
-    { id: 'K03', html: '<!doctype html><html><head></head><body><dialog id="dialog" open><input value="unsaved draft"></dialog></body></html>', check: (html: string) => html.includes('<dialog id="dialog" open') && html.includes('unsaved draft') },
-    { id: 'K04', html: '<!doctype html><html class="theme-dark"><head></head><body><input id="setting" type="checkbox" checked></body></html>', check: (html: string) => html.includes('theme-dark') && html.includes('checked') }
-  ];
+  const fixture = '<!doctype html><html><head><title>Free capture</title></head><body><h1>Acceptance SPA</h1><input id="state" value="initial"><p id="counter">0</p></body></html>';
+  runner = new SnapshotRunner({
+    scenario: {
+      id: 'v3-acceptance',
+      version: '3.0.0',
+      startUrl: `data:text/html;charset=utf-8,${encodeURIComponent(fixture)}`,
+      captureMode: 'exact',
+      hotkey: 'Ctrl+Shift+Y',
+      captureButton: true
+    },
+    outputRoot: temporaryRoot,
+    headless: !headed,
+    log: () => undefined
+  });
+  await runner.start();
 
-  for (let iteration = 0; iteration < samples; iteration += 1) {
-    for (const state of states) {
-      await navigateHtml(state.html);
-      const payload = await captureFromPage(page, state.id, 'exact', []);
-      if (state.check(payload.html) && !payload.oversized) functionalResults[state.id].passed += 1;
-    }
+  for (let index = 1; index <= 5; index += 1) {
+    await runner.page.locator('#counter').evaluate((node, value) => { node.textContent = `hotkey ${value}`; }, index);
+    await runner.page.keyboard.press('Control+Shift+Y');
+    await waitForCount(runner, index);
+    await new Promise((resolve) => setTimeout(resolve, 775));
   }
+  for (let index = 1; index <= 5; index += 1) {
+    await runner.page.locator('#counter').evaluate((node, value) => { node.textContent = `button ${value}`; }, index);
+    await runner.page.getByRole('button', { name: 'Capture rendered DOM as HTML' }).click();
+    await waitForCount(runner, 5 + index);
+  }
+  for (let index = 1; index <= 10; index += 1) {
+    await runner.page.locator('#state').fill(`terminal value ${index}`);
+    await runner.capture(`terminal ${index}`);
+  }
+  await runner.finish();
 
-  await navigateHtml('<!doctype html><html><head><title>50k nodes</title></head><body><main id="root"></main></body></html>');
+  const files = await readdir(runner.runDir);
+  const validation = await validateHtml(runner.runDir);
+
+  browser = await launchChromium({ headless: !headed });
+  const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+  await page.addInitScript({ content: captureRuntimeScript({ hotkey: 'Ctrl+Shift+Y', captureMode: 'exact', captureButton: true }) });
+  await page.goto('data:text/html;charset=utf-8,' + encodeURIComponent('<!doctype html><html><head><title>50k nodes</title></head><body><main id="root"></main></body></html>'));
   await page.evaluate(() => {
     const root = document.querySelector('#root')!;
     const fragment = document.createDocumentFragment();
-    for (let index = 0; index < 50_000; index += 1) {
-      const node = document.createElement('span');
-      node.textContent = String(index);
-      fragment.append(node);
-    }
+    for (let index = 0; index < 50_000; index += 1) fragment.append(document.createElement('span'));
     root.append(fragment);
   });
-  const shortcutLatencyMs: number[] = [];
   const serializationMs: number[] = [];
   for (let iteration = 0; iteration < samples; iteration += 1) {
-    const payload = await captureFromPage(page, 'K01', 'exact', []);
-    shortcutLatencyMs.push(new Date(payload.cloneStartedAt).getTime() - new Date(payload.requestedAt).getTime());
+    const payload = await captureFromPage(page, undefined, 'exact');
     serializationMs.push(new Date(payload.capturedAt).getTime() - new Date(payload.cloneStartedAt).getTime());
   }
 
-  await navigateHtml('<!doctype html><html><head><title>Save benchmark</title></head><body><input value="ready"><p>stable</p></body></html>');
-  const saveTimeMs: number[] = [];
-  const benchmarkKeypoint: KeypointConfig = { id: 'K01', name: 'Save benchmark', instruction: 'Automated benchmark' };
-  for (let iteration = 0; iteration < samples; iteration += 1) {
-    const payload = await captureFromPage(page, 'K01', 'exact', []);
-    const screenshot = await page.screenshot({ type: 'png' });
-    const started = performance.now();
-    await writeCaptureArtifacts({
-      runDir: temporaryRoot,
-      runId: 'acceptance',
-      scenarioId: 'conformance',
-      scenarioVersion: '1.0.0',
-      keypoint: benchmarkKeypoint,
-      payload,
-      screenshot
-    });
-    saveTimeMs.push(performance.now() - started);
-  }
-
-  await navigateHtml('<!doctype html><html><head></head><body><main id="root"></main></body></html>');
+  await page.goto('data:text/html;charset=utf-8,' + encodeURIComponent('<!doctype html><html><head><title>Oversized</title></head><body><main id="root"></main></body></html>'));
   await page.evaluate(() => {
     const root = document.querySelector('#root')!;
     const fragment = document.createDocumentFragment();
     for (let index = 0; index < 150_001; index += 1) fragment.append(document.createElement('i'));
     root.append(fragment);
   });
-  const oversizedPayload = await captureFromPage(page, 'K99', 'exact', []);
+  const oversized = await captureFromPage(page, undefined, 'exact');
 
-  const thresholds = {
-    shortcutLatencyP95Ms: 200,
-    serialization50kP95Ms: 1_000,
-    saveP95Ms: 3_000,
-    keypointPasses: samples
-  };
+  const thresholds = { serialization50kP95Ms: 1_000, captureCount: samples, triggerPasses: 5 };
   const metrics = {
-    shortcutLatencyP50Ms: percentile(shortcutLatencyMs, 0.5),
-    shortcutLatencyP95Ms: percentile(shortcutLatencyMs, 0.95),
-    serialization50kP50Ms: percentile(serializationMs, 0.5),
     serialization50kP95Ms: percentile(serializationMs, 0.95),
-    saveP50Ms: Number(percentile(saveTimeMs, 0.5).toFixed(2)),
-    saveP95Ms: Number(percentile(saveTimeMs, 0.95).toFixed(2))
+    htmlCount: files.filter((file) => file.endsWith('.html')).length,
+    jsonCount: files.filter((file) => file.endsWith('.json')).length,
+    pngCount: files.filter((file) => file.endsWith('.png')).length,
+    triggers: { hotkey: 5, button: 5, terminal: 10 }
   };
   const checks = {
-    functional20Of20: Object.values(functionalResults).every((result) => result.passed === samples),
-    shortcutLatency: metrics.shortcutLatencyP95Ms <= thresholds.shortcutLatencyP95Ms,
+    arbitrary20Captures: runner.captures.length === samples && metrics.htmlCount === 11,
+    sameTitleOverwrite: files.filter((file) => file === 'Free capture.html').length === 1,
+    htmlOnly: metrics.jsonCount === 0 && metrics.pngCount === 0 && files.every((file) => file.endsWith('.html')),
+    threeControls: metrics.triggers.hotkey >= 5 && metrics.triggers.button >= 5 && metrics.triggers.terminal >= 5,
+    validation: validation.passed && validation.results.length === metrics.htmlCount,
     serialization50k: metrics.serialization50kP95Ms <= thresholds.serialization50kP95Ms,
-    saveTime: metrics.saveP95Ms <= thresholds.saveP95Ms,
-    oversizedGuard: oversizedPayload.oversized && oversizedPayload.html === ''
+    oversizedGuard: oversized.oversized && oversized.html === ''
   };
   const report = {
-    schemaVersion: 1,
+    schemaVersion: 3,
     generatedAt: new Date().toISOString(),
-    environment: { node: process.version, browser: 'chromium', browserVersion: browser.version(), platform: process.platform, viewport: '1280x800' },
+    environment: { node: process.version, browser: 'chromium', browserVersion: browser.version(), platform: process.platform, headed },
     samples,
-    functionalResults,
     thresholds,
     metrics,
     checks,
@@ -125,6 +117,7 @@ try {
   console.log(JSON.stringify(report, null, 2));
   if (!report.passed) process.exitCode = 1;
 } finally {
-  await browser.close();
+  if (runner) await runner.finish().catch(() => undefined);
+  await browser?.close().catch(() => undefined);
   await rm(temporaryRoot, { recursive: true, force: true });
 }

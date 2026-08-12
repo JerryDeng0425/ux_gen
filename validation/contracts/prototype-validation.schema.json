@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Prototype validation report",
+  "type": "object",
+  "required": ["schemaVersion", "status", "environment", "commands", "browsers", "routes", "interactions", "baselineHashes", "artifacts"],
+  "properties": {
+    "schemaVersion": { "const": 3 },
+    "status": { "enum": ["PASS", "FAIL", "SKIP", "BLOCKED"] },
+    "environment": { "type": "object", "required": ["os", "node", "gitHead"] },
+    "commands": { "type": "array", "minItems": 1 },
+    "browsers": { "type": "object", "required": ["chrome", "edge"] },
+    "routes": { "type": "array", "minItems": 8 },
+    "interactions": { "type": "array", "minItems": 3 },
+    "baselineHashes": { "type": "object", "minProperties": 7 },
+    "artifacts": { "type": "object" }
+  }
+}

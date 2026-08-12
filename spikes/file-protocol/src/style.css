@@ -1,0 +1,7 @@
+:root { font-family: Inter, "Microsoft YaHei", sans-serif; color: #1f2937; background: #f4f6f8; }
+html, body, #app, .shell { min-height: 100%; margin: 0; }
+.el-header { display: flex; align-items: center; justify-content: space-between; color: white; background: #1f5eff; }
+.el-aside { min-height: calc(100vh - 60px); background: white; }
+.el-main { min-width: 0; }
+h1 { margin-top: 0; }
+.el-card strong { font-size: 28px; color: #1f5eff; }

@@ -3,25 +3,28 @@ import { validateScenario } from '../../src/scenarios/loader.js';
 
 const validScenario = {
   id: 'fixture',
-  version: '1.0.0',
-  startUrl: 'http://127.0.0.1:4173/',
-  keypoints: [{ id: 'K01', name: 'Ready', instruction: 'Wait for ready state' }]
+  version: '2.0.0',
+  startUrl: 'http://127.0.0.1:4173/'
 };
 
-test('accepts a valid scenario and applies defaults', () => {
+test('accepts a launch config without keypoints and applies defaults', () => {
   const scenario = validateScenario(validScenario);
   expect(scenario.captureMode).toBe('exact');
   expect(scenario.hotkey).toBe('Ctrl+Shift+Y');
+  expect(scenario.captureButton).toBe(true);
 });
 
-for (const field of ['id', 'startUrl', 'keypoints'] as const) {
-  test(`rejects a scenario missing ${field}`, () => {
+for (const field of ['id', 'version', 'startUrl'] as const) {
+  test(`rejects a launch config missing ${field}`, () => {
     const invalid = { ...validScenario } as Record<string, unknown>;
     delete invalid[field];
     expect(() => validateScenario(invalid)).toThrow(/Invalid scenario/);
   });
 }
 
-test('rejects duplicate keypoint ids', () => {
-  expect(() => validateScenario({ ...validScenario, keypoints: [...validScenario.keypoints, ...validScenario.keypoints] })).toThrow(/unique/);
+test('rejects legacy fixed keypoints instead of silently enforcing them', () => {
+  expect(() => validateScenario({
+    ...validScenario,
+    keypoints: [{ id: 'K01', name: 'Blocked', instruction: 'Legacy gate' }]
+  })).toThrow(/Invalid scenario/);
 });

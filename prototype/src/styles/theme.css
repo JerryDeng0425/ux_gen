@@ -1,0 +1,29 @@
+:root {
+  --app-primary: #409eff;
+  --app-aside: #001529;
+  --app-surface: #ffffff;
+  --app-canvas: #f0f2f5;
+  --app-text: #303133;
+  --el-color-primary: var(--app-primary);
+  font-family: Inter, "PingFang SC", "Microsoft YaHei", Arial, sans-serif;
+  color: var(--app-text);
+  background: var(--app-canvas);
+}
+
+* { box-sizing: border-box; }
+html, body, #app { width: 100%; min-width: 1180px; min-height: 100%; margin: 0; }
+body { background: var(--app-canvas); }
+.app-shell { min-height: 100vh; }
+.app-aside { position: fixed; inset: 0 auto 0 0; z-index: 20; background: var(--app-aside); color: white; }
+.brand { display: flex; align-items: center; gap: 10px; height: 60px; padding: 0 20px; font-size: 17px; }
+.brand-mark { display: grid; width: 30px; height: 30px; place-items: center; border-radius: 8px; background: var(--app-primary); }
+.side-menu { border-right: 0 !important; background: transparent !important; }
+.side-menu .el-menu-item { color: #bfcbd9; }
+.side-menu .el-menu-item:hover, .side-menu .el-menu-item.is-active { color: white; background: #0960bd !important; }
+.app-aside + .el-container { min-width: 0; margin-left: 210px; }
+.app-header { display: flex; align-items: center; justify-content: space-between; height: 60px; border-bottom: 1px solid #e5e7eb; background: white; }
+.app-main { min-height: calc(100vh - 60px); padding: 16px 20px 28px; background: var(--app-canvas); }
+.breadcrumb { margin: 4px 0 16px; }
+.el-card { border-color: #e5e7eb; border-radius: 4px; }
+.el-card__header { padding: 16px 20px; }
+.el-table { --el-table-header-bg-color: #f5f7fa; }

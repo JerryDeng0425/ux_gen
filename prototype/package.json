@@ -1,0 +1,24 @@
+{
+  "name": "ux-gen-offline-prototype",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "typecheck": "vue-tsc --noEmit",
+    "build": "vite build --configLoader runner"
+  },
+  "dependencies": {
+    "@element-plus/icons-vue": "2.3.2",
+    "element-plus": "2.13.6",
+    "vue": "3.5.31",
+    "vue-router": "4.6.3"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "6.0.5",
+    "typescript": "6.0.2",
+    "vite": "7.3.6",
+    "vite-plugin-singlefile": "2.3.0",
+    "vue-tsc": "3.2.6"
+  }
+}

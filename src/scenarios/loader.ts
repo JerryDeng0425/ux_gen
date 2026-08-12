@@ -30,14 +30,11 @@ export function validateScenario(value: unknown): ScenarioConfig {
     throw new ScenarioValidationError(validate.errors ?? []);
   }
   const scenario = value as ScenarioConfig;
-  const ids = scenario.keypoints.map((keypoint) => keypoint.id);
-  if (new Set(ids).size !== ids.length) {
-    throw new Error('Invalid scenario: keypoint ids must be unique');
-  }
   return {
     ...scenario,
     captureMode: scenario.captureMode ?? 'exact',
-    hotkey: scenario.hotkey ?? 'Ctrl+Shift+Y'
+    hotkey: scenario.hotkey ?? 'Ctrl+Shift+Y',
+    captureButton: scenario.captureButton ?? true
   };
 }
 
