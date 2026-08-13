@@ -11,7 +11,7 @@ if (!Number.isInteger(iterations) || iterations < 1 || iterations > 100) throw n
 const scenario = await loadScenario(path.resolve('scenarios/vuestic.json'));
 const temporaryRoot = await mkdtemp(path.join(tmpdir(), 'vuestic-acceptance-'));
 const reportPath = path.resolve('reports/vuestic-acceptance-report.json');
-const results: Array<{ iteration: number; passed: boolean; durationMs: number; keypoints: Record<string, string>; error?: string }> = [];
+const results: Array<{ iteration: number; passed: boolean; durationMs: number; captureCount: number; error?: string }> = [];
 let browserUserAgent = '';
 
 try {
@@ -24,12 +24,12 @@ try {
       if (!browserUserAgent) browserUserAgent = await runner.page.evaluate(() => navigator.userAgent);
       await executeVuesticFlow(runner);
       const complete = await runner.finish();
-      const validation = await validateRun(runner.runDir, { writeReport: false });
+      const validation = await validateRun(runner.runDir);
       results.push({
         iteration,
         passed: complete && validation.passed,
         durationMs: Math.round(performance.now() - started),
-        keypoints: Object.fromEntries(runner.summary.keypoints.map((item) => [item.id, item.status]))
+        captureCount: runner.captures.length
       });
     } catch (error) {
       await runner.closeAsFailed(error);
@@ -37,12 +37,12 @@ try {
         iteration,
         passed: false,
         durationMs: Math.round(performance.now() - started),
-        keypoints: Object.fromEntries(runner.summary.keypoints.map((item) => [item.id, item.status])),
+        captureCount: runner.captures.length,
         error: error instanceof Error ? error.message : String(error)
       });
     }
     const report = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       generatedAt: new Date().toISOString(),
       scenarioId: scenario.id,
       scenarioVersion: scenario.version,

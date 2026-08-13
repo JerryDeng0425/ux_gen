@@ -13,8 +13,19 @@ playwright-report/
 blob-report/
 
 # DOM snapshot runtime artifacts
-artifacts/
+/artifacts/
 .snapshot-profile-*/
+
+# v3 generated and local-only artifacts
+/benchmark/vue-pure-admin/
+/delivery/dist/
+/delivery/*.zip
+/validation/reports/*/
+/spikes/file-protocol/dist/
+/spikes/file-protocol/offline-dist/
+/spikes/file-protocol/node_modules/
+/prototype/dist/
+/prototype/node_modules/
 
 # Local Skill validation dependencies
 .skill-validation-deps/
@@ -49,4 +60,5 @@ pnpm-debug.log*
 Thumbs.db
 Desktop.ini
 
-# Keep reports/*.json tracked as acceptance evidence.
+# Keep reports/*.json tracked as historical v1/v2 acceptance evidence.
+# Keep baseline/pages user-controlled: the tool never changes its Git policy.

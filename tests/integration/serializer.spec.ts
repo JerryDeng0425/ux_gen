@@ -19,12 +19,12 @@ test.afterAll(async () => {
 });
 
 test.beforeEach(async ({ page }) => {
-  await page.addInitScript({ content: captureRuntimeScript({ hotkey: 'Ctrl+Shift+Y', captureMode: 'exact', redactSelectors: [] }) });
+  await page.addInitScript({ content: captureRuntimeScript({ hotkey: 'Ctrl+Shift+Y', captureMode: 'exact', captureButton: true }) });
   await page.goto(`${baseUrl}?token=fixture-secret#/users`);
   await expect(page.getByTestId('users')).toBeVisible();
 });
 
-test('freezes runtime state, removes scripts, and redacts secrets', async ({ page }) => {
+test('freezes runtime state and removes executable content without business redaction', async ({ page }) => {
   await page.locator('#name').fill('Ada Lovelace');
   await page.locator('#notes').fill('runtime notes');
   await page.locator('#enabled').check();
@@ -35,16 +35,17 @@ test('freezes runtime state, removes scripts, and redacts secrets', async ({ pag
   await page.locator('#dialog-value').fill('unsaved draft');
   await page.locator('#scroll-box').evaluate((element) => { element.scrollTop = 40; element.scrollLeft = 30; });
 
-  const payload = await captureFromPage(page, 'K03', 'exact', []);
+  const payload = await captureFromPage(page, 'dialog draft', 'exact');
   expect(payload.oversized).toBe(false);
   expect(payload.html).toContain('value="Ada Lovelace"');
   expect(payload.html).toContain('runtime notes');
   expect(payload.html).toContain('value="beta" selected');
   expect(payload.html).toContain('id="edit-dialog" open');
   expect(payload.html).toContain('unsaved draft');
-  expect(payload.html).not.toContain('fixture-secret');
+  expect(payload.html).toContain('fixture-secret');
   expect(payload.html).not.toContain('<script');
-  expect(payload.sanitizedUrl).toContain('%5BREDACTED%5D');
+  expect(payload.html).not.toContain('spa-snapshot-capture-host');
+  expect(payload.sanitizedUrl).toContain('token=fixture-secret');
   expect(payload.route).toContain('#/users');
   expect(payload.scrollPositions.some((position) => position.top === 40 && position.left === 30)).toBe(true);
   expect(payload.warnings.some((warning) => warning.code === 'canvas_unreadable')).toBe(false);
@@ -61,20 +62,15 @@ test('freezes runtime state, removes scripts, and redacts secrets', async ({ pag
   await replay.close();
 });
 
-test('serializes readable canvas and warns for the unreadable canvas', async ({ page }) => {
+test('keeps canvas as HTML without embedding raster screenshots', async ({ page }) => {
   await page.goto(`${baseUrl}#/dashboard`);
-  const payload = await captureFromPage(page, 'K01', 'exact', []);
-  expect(payload.html).toContain('data-snapshot-canvas="true"');
+  const payload = await captureFromPage(page, 'dashboard', 'exact');
+  expect(payload.html).toContain('<canvas');
+  expect(payload.html).not.toContain('data:image/png');
   expect(payload.warnings.some((warning) => warning.code === 'canvas_unreadable')).toBe(true);
   expect(payload.specialContent.canvasTotal).toBe(2);
-  expect(payload.specialContent.canvasSerialized).toBe(1);
-  expect(payload.specialContent.canvasFailed).toBe(1);
-});
-
-test('applies configured selector redaction', async ({ page }) => {
-  const payload = await captureFromPage(page, 'K02', 'exact', ['#editable']);
-  expect(payload.html).toContain('data-snapshot-redacted="selector"');
-  expect(payload.html).not.toContain('editable initial');
+  expect(payload.specialContent.canvasSerialized).toBe(0);
+  expect(payload.specialContent.canvasFailed).toBe(2);
 });
 
 test('submits a frozen payload through the page hotkey binding', async ({ page }) => {
@@ -83,4 +79,12 @@ test('submits a frozen payload through the page hotkey binding', async ({ page }
   await page.keyboard.press('Control+Shift+Y');
   await expect.poll(() => received).not.toBeUndefined();
   expect(received).toMatchObject({ oversized: false, route: expect.stringContaining('#/users') });
+});
+
+test('submits through the always-visible Shadow DOM button', async ({ page }) => {
+  let received: unknown;
+  await page.exposeBinding('__spaSnapshotSubmit', (_source, payload) => { received = payload; return { filePath: 'capture.html' }; });
+  await page.getByRole('button', { name: 'Capture rendered DOM as HTML' }).click();
+  await expect.poll(() => received).not.toBeUndefined();
+  expect(received).toMatchObject({ oversized: false, requestId: expect.stringContaining('-button') });
 });

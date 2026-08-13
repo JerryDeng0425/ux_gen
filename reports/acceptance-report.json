@@ -1,51 +1,37 @@
 {
-  "schemaVersion": 1,
-  "generatedAt": "2026-08-11T18:04:03.932Z",
+  "schemaVersion": 3,
+  "generatedAt": "2026-08-12T18:21:19.053Z",
   "environment": {
     "node": "v24.18.0",
     "browser": "chromium",
     "browserVersion": "151.0.7922.76",
     "platform": "win32",
-    "viewport": "1280x800"
+    "headed": false
   },
   "samples": 20,
-  "functionalResults": {
-    "K01": {
-      "passed": 20,
-      "total": 20
-    },
-    "K02": {
-      "passed": 20,
-      "total": 20
-    },
-    "K03": {
-      "passed": 20,
-      "total": 20
-    },
-    "K04": {
-      "passed": 20,
-      "total": 20
-    }
-  },
   "thresholds": {
-    "shortcutLatencyP95Ms": 200,
     "serialization50kP95Ms": 1000,
-    "saveP95Ms": 3000,
-    "keypointPasses": 20
+    "captureCount": 20,
+    "triggerPasses": 5
   },
   "metrics": {
-    "shortcutLatencyP50Ms": 0,
-    "shortcutLatencyP95Ms": 0,
-    "serialization50kP50Ms": 106,
-    "serialization50kP95Ms": 136,
-    "saveP50Ms": 6.53,
-    "saveP95Ms": 9.55
+    "serialization50kP95Ms": 101,
+    "htmlCount": 11,
+    "jsonCount": 0,
+    "pngCount": 0,
+    "triggers": {
+      "hotkey": 5,
+      "button": 5,
+      "terminal": 10
+    }
   },
   "checks": {
-    "functional20Of20": true,
-    "shortcutLatency": true,
+    "arbitrary20Captures": true,
+    "sameTitleOverwrite": true,
+    "htmlOnly": true,
+    "threeControls": true,
+    "validation": true,
     "serialization50k": true,
-    "saveTime": true,
     "oversizedGuard": true
   },
   "passed": true

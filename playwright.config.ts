@@ -9,11 +9,12 @@ export default defineConfig({
   reporter: [['list'], ['json', { outputFile: 'test-results/results.json' }]],
   use: {
     browserName: 'chromium',
-    channel: process.env.PLAYWRIGHT_USE_SYSTEM_CHROME === '1' ? 'chrome' : undefined,
+    channel: 'chrome',
     headless: true,
     viewport: { width: 1280, height: 800 },
-    screenshot: 'only-on-failure',
-    trace: 'retain-on-failure'
+    screenshot: 'off',
+    video: 'off',
+    trace: 'off'
   },
   outputDir: 'test-results/output'
 });

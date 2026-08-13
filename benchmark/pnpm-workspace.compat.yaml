@@ -1,0 +1,13 @@
+# Local reproducibility patch for vue-pure-admin v7.0.0 with pnpm 11.
+# Copy this file over benchmark/vue-pure-admin/pnpm-workspace.yaml after extraction.
+allowBuilds:
+  '@parcel/watcher': true
+  '@tailwindcss/oxide': false
+  core-js: true
+  es5-ext: true
+  esbuild: true
+  typeit: true
+  vue-demi: true
+  vue3-danmaku: false
+publicHoistPattern:
+  - tippy.js

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Capture SPA HTML"
+  short_description: "Capture rendered SPA pages as latest HTML baselines"
+  default_prompt: "Use $capture-spa-html to open my target URL and guide free rendered-HTML captures."

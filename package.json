@@ -1,6 +1,6 @@
 {
-  "name": "spa-keypoint-snapshot",
-  "version": "0.1.0",
+  "name": "spa-rendered-dom-snapshot",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "bin": {
@@ -14,7 +14,16 @@
     "test": "playwright test",
     "test:unit": "playwright test tests/unit",
     "test:integration": "playwright test tests/integration",
+    "test:prototype:chrome": "playwright test --config playwright.prototype.config.ts --project chrome",
+    "test:prototype:edge": "playwright test --config playwright.prototype.config.ts --project edge",
+    "test:prototype:layout": "playwright test tests/prototype/runtime-layout.spec.ts --config playwright.prototype.config.ts",
+    "audit:offline-assets": "tsx src/validation/offline-audit.ts",
+    "package:offline": "powershell -ExecutionPolicy Bypass -File scripts/package-offline.ps1",
+    "verify:offline-zip": "powershell -ExecutionPolicy Bypass -File scripts/verify-offline-zip.ps1",
+    "acceptance:v3": "powershell -ExecutionPolicy Bypass -File scripts/acceptance-v3.ps1",
     "acceptance": "tsx src/acceptance.ts",
+    "acceptance:recorder:v3": "tsx src/acceptance.ts",
+    "baseline:pure-admin": "tsx src/validation/pure-admin-baseline.ts",
     "acceptance:vuestic": "tsx src/acceptance-vuestic.ts"
   },
   "engines": {
@@ -22,14 +31,11 @@
   },
   "dependencies": {
     "ajv": "8.20.0",
-    "pixelmatch": "7.1.0",
-    "playwright": "1.55.1",
-    "pngjs": "7.0.0"
+    "playwright": "1.55.1"
   },
   "devDependencies": {
     "@playwright/test": "1.55.1",
     "@types/node": "24.3.0",
-    "@types/pngjs": "6.0.5",
     "@vitejs/plugin-vue": "6.0.1",
     "tsx": "4.20.5",
     "typescript": "5.9.2",

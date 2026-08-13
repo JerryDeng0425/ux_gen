@@ -1,28 +1,21 @@
-# MVP 需求—验收证据矩阵
+# PRD v3 验收证据矩阵
 
-| PRD 完成项 | 自动化证据 | 当前状态 |
+最终聚合报告：[Step 35 v3 端到端验收](../validation/reports/step-35-v3-end-to-end-acceptance.md)。旧 v1/v2 报告仅作历史背景，不计入本矩阵。
+
+| PRD 能力 | 主要证据 | 状态 |
 | --- | --- | --- |
-| 一个命令启动有界面 Chromium | `SnapshotRunner`、CLI `run`、Vuestic E2E | PASS |
-| 用户可手工操作 | headed context，不注入可见业务控件 | PASS |
-| 快捷键和终端均可捕获 | hotkey binding 测试、`captureFromPage` 集成测试 | PASS |
-| K01–K04 生成 HTML/PNG/JSON | conformance E2E、Vuestic E2E | PASS |
-| 表单、选中、弹窗、路由固化 | serializer 与四关键点断言 | PASS |
-| 不含密码、文件路径、可执行脚本 | serializer/validator 安全负向测试 | PASS |
-| 自动验证满足门槛 | `reports/acceptance-report.json` | PASS |
-| 不可序列化内容明确告警 | canvas/iframe/Shadow DOM fixture | PASS |
-
-## 已执行指标
-
-- K01–K04 本地确定性能力：各 20/20。
-- 快捷键请求到克隆开始 p95：见 `reports/acceptance-report.json`。
-- 50,000 节点序列化 p95：见同一报告。
-- 产物保存 p95：见同一报告。
-- 150,000 节点上限：oversized guard 已通过。
-- Vuestic 公网重复验收：见 `reports/vuestic-acceptance-report.json`；该结果与具体运行日期和场景版本绑定。
-
-## 依赖与环境证据
-
-- 最终锁定：Playwright 1.55.1、Vite 7.3.6、Ajv 8.20.0。
-- 最终 `npm install` 审计结果：0 vulnerabilities。
-- Playwright 1.55.1 在系统 Chrome 151 fallback 上完成全量本地构建、测试和性能验收。
-- Vuestic 20/20 报告生成于安全升级前的 Playwright 1.55.0；其场景和应用代码未变。升级后的公网重跑因自动审批服务容量错误未获执行权限，未绕过该限制。
+| FR-REC-01 自然语言 URL、隔离 Chromium、预检 | Steps 22–24 | PASS |
+| FR-REC-02 按钮/快捷键/终端、标题/显式命名、同名覆盖 | Steps 20–23；最终 20/20 capture | PASS |
+| FR-REC-03 渲染 HTML 固化、安全静态化、HTML-only | Steps 19、23；非 HTML 产物 0 | PASS |
+| FR-REC-04 finish、浏览器关闭、失败保全 | Steps 21、23 | PASS |
+| FR-PROTO-01 Vue 3/TS/Vite/Element Plus/Hash、无 Pinia/API | Steps 27–31 | PASS |
+| FR-PROTO-02 固定 Element Plus Skills | Step 25；固定 commit 与 89/89 校验 | PASS |
+| FR-PROTO-03 风格、数据、语料 | Steps 28–30、33–34；组件/语料代理审阅 | PASS |
+| FR-PROTO-04 全页面、导航、CRUD、表单、弹窗、状态反馈 | 8 routes；Chrome/Edge 各 8/8 | PASS |
+| FR-PROTO-05 新基线隔离、分析、受控合并 | Step 34 | PASS |
+| 自动验证 | typecheck/build/contract/runtime/layout/offline/ZIP 聚合 | PASS |
+| FR-DEL-01 ZIP 白名单与哈希 | root `index.html`/`README.txt`，越界项 0 | PASS |
+| FR-DEL-02 无服务、无网络、Chrome/Edge `file://` | 解压包 Chrome/Edge 各 8/8 | PASS |
+| 自然语言修改旧页并新增页 | Step 33：优先级 + 异常用户页 | PASS |
+| 不自动 commit | Git HEAD 起止一致 | PASS |
+| 人工专属动作 | 用户要求无人工干预；代理审阅与自动等价验证完成，未声称物理双击或人工签字 | PASS（适配） |

@@ -1,389 +1,366 @@
-# SPA 关键时点 DOM 快照工具 PRD
+# IT 系统 HTML 基线到交互原型工作流 PRD
 
 ## 1. 文档信息
 
 | 项目 | 内容 |
 | --- | --- |
-| 产品名称 | SPA Keypoint Snapshot（暂定） |
-| 文档状态 | Draft v1.0 |
-| 更新日期 | 2026-08-12 |
-| 基准网站 | Vuestic Admin |
-| 首选实现 | Playwright 启动有界面 Chromium，用户手工操作，页面快捷键或终端命令触发快照 |
-| 实施计划 | [分步骤实施计划](./plans/README.md) |
-| 使用说明 | [USAGE.md](./USAGE.md) |
-| 验收矩阵 | [ACCEPTANCE_MATRIX.md](./ACCEPTANCE_MATRIX.md) |
+| 产品名称 | HTML Baseline to Interactive Prototype Workflow |
+| 文档版本 | v3.0 |
+| 文档状态 | v3 已实施并通过自动化验收 |
+| 更新日期 | 2026-08-13 |
+| 目标用户 | IT 网页系统业务分析师 |
+| MVP 组件库 | Element Plus |
+| 历史需求 | [v2 捕获工具 PRD](./archive/PRD-v2-rendered-dom-capture.md) |
+| 实施与验收 | [v3 Step 17–35](./plans/v3/README.md)（全部完成） |
 
 ## 2. 背景
 
-在测试、审计、UI 复现和数据采集场景中，需要用户按照既定流程手工操作一个 SPA，并在若干指定关键时点保存浏览器已经渲染完成的 DOM。
+业务分析师需要基于已经上线的 IT 系统制作可交互高保真原型，并持续与业务用户核对新需求。原系统通常是 Vue 3 SPA，但业务分析师未必能读取其源码；服务器返回的初始 HTML 也不能反映前端渲染后的表格、表单、弹窗、路由和业务语料。
 
-传统“查看网页源代码”只能得到服务器返回的初始 HTML，不能得到 Vue 运行后生成的节点、当前表单值、弹窗状态和路由切换后的页面。浏览器“保存网页”又偏向网页归档，难以明确对应某个手工操作时点。
+现有仓库已经能够用 Playwright 打开有界面 Chromium，由用户手工操作并随时保存当前渲染 DOM。该能力需要升级成完整工作流：
 
-本产品使用 Playwright 启动一个正常可见的 Chromium。用户直接在该浏览器中手工操作；到达关键点后，在页面内按快捷键或在终端输入命令，工具立即冻结当前 DOM，并由 Node.js 进程写出 HTML 文件。该方案不需要开发或安装自定义浏览器插件。
+1. 把原系统当前页面保存为只读 HTML 基线。
+2. 由 Codex 直接阅读全部 HTML 基线和自然语言说明，创建独立的 Vue 3 + Element Plus 交互原型。
+3. 业务分析师通过自然语言持续新增或修改功能。
+4. 自动验证工程、关键交互和页面布局。
+5. 输出完全离线的静态网站 ZIP，用户解压后双击 `index.html` 即可评审。
 
-## 3. 产品决策摘要
+## 3. 产品原则
 
-本期锁定以下决策：
-
-- 使用 Playwright，而不是自研浏览器扩展。
-- 由 Playwright 启动独立、有界面的 Chromium，不附着用户日常浏览器。
-- 用户操作是真实手工操作，Playwright 只负责浏览器生命周期、关键点捕获和验证。
-- 页面快捷键 `Ctrl+Shift+Y` 是默认捕获入口；终端命令是备用入口。
-- 主产物是“冻结型 HTML”，用于保存关键时点的 DOM，不承诺重新打开后继续运行原 Vue 应用。
-- MVP 的 CSS、图片和字体允许继续引用原网站资源，因此重新打开 HTML 时可能需要联网。
-- 同时保存一张参考截图和一份元数据 JSON，用于发现 canvas、Shadow DOM 等 HTML 无法完整表达的差异。
+1. **基线与原型分离**：捕获 HTML 是原系统事实参考，不直接改造成原型；Vue 工程是可持续修改的交互稿。
+2. **只录制 HTML**：不保存截图、视频、Playwright Codegen、操作轨迹或流程模型。
+3. **用户决定捕获时机**：不设关键点、步骤、路由或 selector 门禁。
+4. **简单覆盖语义**：文件名就是页面名称；同名 capture 直接覆盖旧 HTML。
+5. **AI 直接实现**：不开发确定性的 HTML→Vue 转换器、页面分析工具、页面 Agent 或工作台。
+6. **组件库优先**：新页面和修改页面必须使用 Element Plus，并尽量继承基线页面风格、语料和数据。
+7. **单仓库单系统**：一个 Git 仓库对应一个 IT 系统；不建设跨项目管理能力。
+8. **用户负责内容治理**：工具不做脱敏、隐私扫描、Git 提交门禁或资源版权判断。
 
 ## 4. 目标与非目标
 
 ### 4.1 产品目标
 
-1. 用户无需编写自动化脚本即可在可见浏览器中完成手工操作。
-2. 在指定关键点快速、稳定地导出当前渲染 DOM 为 HTML。
-3. 固化常见运行时状态，包括输入值、勾选状态、选择项、弹窗和当前图片资源。
-4. 每个关键点产物可追溯到场景、URL、时间和浏览器视口。
-5. 对无法可靠写入 HTML 的内容给出明确告警，不允许静默丢失。
-6. 使用自动化验证确认产物未截断、可解析且包含预期状态。
+- 用自然语言调用独立录制 Skill，并提供本次目标 URL。
+- 在隔离的有界面 Chromium 中由用户手工登录和操作。
+- 在任意时刻保存当前渲染 DOM，形成多页面最新 HTML 基线。
+- 使用页面标题或显式名称确定文件名；同名覆盖。
+- Codex 直接依据全部基线生成完整、多页面、可交互的 Vue 3 原型。
+- 原型尽量保留原系统菜单、路由、面包屑、页面层级、数据和业务文案。
+- 自然语言需求可修改已有页面，也可新增页面、菜单、路由和交互。
+- 原型具备查询、筛选、分页、表单校验、增删改、弹窗、状态切换及成功/失败反馈。
+- 自动完成构建、关键交互、溢出、遮挡和静态离线能力检查。
+- 交付 Chrome/Edge 可双击打开的完全离线 ZIP。
 
 ### 4.2 非目标
 
-MVP 不承诺：
+- 不读取或依赖原系统前端源码。
+- 不把捕获 HTML 恢复成原 Vue 应用。
+- 不保存或重放用户操作流程。
+- 不保存基线截图，也不做像素级视觉对比。
+- 不开发页面身份自动识别、页面管理 UI、版本中心或页面 Agent。
+- 不开发 HTML→Vue 确定性代码生成器。
+- 不接入真实后端 API；MVP 使用前端内存模拟数据。
+- 不为公司自有组件库预建抽象层；MVP 直接使用 Element Plus，后续另行整体迁移。
+- 不自动 Git commit；只有用户明确要求时才提交。
 
-- 把 Vue 组件实例、Pinia/Vuex 状态、闭包和事件监听器序列化到 HTML。
-- 让保存后的页面在离线状态下继续完整交互。
-- 保存 Cookie、Local Storage、IndexedDB、Service Worker 或 WebSocket 会话。
-- 捕获虚拟列表中尚未挂载到 DOM 的数据。
-- 通用还原 closed Shadow DOM、跨域 iframe、DRM 视频或 WebGL 状态。
-- 控制或复用用户日常 Chrome 配置、标签页和登录态。
-- 首期支持 Firefox、WebKit 或移动端浏览器。
-
-## 5. 基准网站
-
-### 5.1 选定网站
-
-- 名称：Vuestic Admin
-- 入口：https://admin-demo.vuestic.dev/dashboard
-- 类型：无需登录即可访问的中型 Vue 3 管理后台 SPA
-- 技术栈：Vue 3、Vite、Pinia、Vue Router、Vuestic UI
-- 选择原因：包含站内路由、Dashboard、表格、表单、弹窗、主题设置和 canvas 图表，既接近典型业务系统，也能覆盖 DOM 快照的主要边界。
-
-### 5.2 已确认的页面特征
-
-2026-08-11 的初步检查结果：
-
-- Dashboard 可直接访问，无需登录。
-- 页面存在 `/users`、`/projects`、`/preferences`、`/settings` 等 SPA 路由。
-- Dashboard 渲染后约有 471 个元素、23 个链接和 4 个 canvas。
-- 页面完整 `outerHTML` 约为 5.8 万字符，适合作为中型样本的第一阶段基线。
-
-### 5.3 验证关键点
-
-| ID | 页面/状态 | 用户操作 | 快照必须包含 |
-| --- | --- | --- | --- |
-| K01 | Dashboard 首屏 | 等待统计卡片和图表出现 | 当前路由、主要卡片文本、canvas 告警或替代图像 |
-| K02 | Users 列表 | 输入筛选词并完成筛选/排序 | 输入框当前值、列表结果、当前导航状态 |
-| K03 | 用户或项目编辑弹窗 | 打开弹窗并填写至少两个字段，不提交 | 弹窗 DOM、表单当前值、遮罩层和打开状态 |
-| K04 | Settings/Preferences | 切换主题或布局选项 | 选中状态、主题类名、设置页面内容 |
-
-具体控件 selector 在 PoC 侦察后写入 `scenarios/vuestic.json`。如果线上 Demo 调整了某个弹窗，允许用 Projects 页的等价编辑弹窗替换 K03，但关键点能力要求不变。
-
-## 6. 用户角色与用户故事
-
-### 6.1 目标用户
-
-- 需要保存关键 UI 状态的测试或研发人员。
-- 需要收集 SPA 渲染结果的数据工程人员。
-- 需要对手工流程进行审计和复现的产品或质量人员。
-
-### 6.2 核心用户故事
-
-- 作为操作人员，我希望启动工具后看到一个普通浏览器窗口，可以像平时一样点击、输入和滚动。
-- 作为操作人员，我希望到达关键点时不离开页面，只按一个快捷键就保存当前状态。
-- 作为验证人员，我希望知道每个文件对应哪个关键点、何时捕获、来自哪个 URL。
-- 作为验证人员，我希望工具明确报告 canvas、iframe 或 Shadow DOM 是否可能缺失。
-- 作为安全负责人，我希望密码、文件路径和浏览器存储不会被写入产物。
-
-## 7. 用户流程
+## 5. 端到端工作流
 
 ```mermaid
 flowchart LR
-    A["启动 CLI"] --> B["Playwright 打开有界面 Chromium"]
-    B --> C["自动进入 Vuestic Admin"]
-    C --> D["用户手工操作"]
-    D --> E["页面快捷键或终端命令"]
-    E --> F["同步克隆并固化当前 DOM"]
-    F --> G["Node.js 写出 HTML、截图和元数据"]
-    G --> H{"是否还有关键点"}
-    H -->|是| D
-    H -->|否| I["关闭会话并生成摘要"]
+    A["自然语言调用录制 Skill，并提供 URL"] --> B["预检并启动隔离的 headed Chromium"]
+    B --> C["用户手工登录和自由操作"]
+    C --> D{"需要保存当前页面？"}
+    D -->|否| C
+    D -->|按钮 / Ctrl+Shift+Y / 终端| E["保存安全静态 HTML"]
+    E --> F["按名称更新只读页面基线"]
+    F --> C
+    C --> G["finish 或关闭浏览器"]
+    G --> H["自然语言要求 Codex 生成原型"]
+    H --> I["Codex 汇总页面、路由、组件、语料和交互规划"]
+    I --> J["用户确认首次生成规划"]
+    J --> K["生成 Vue 3 + Element Plus 原型"]
+    K --> L["自然语言持续修改或新增页面"]
+    L --> M["自动构建与交互/布局验证"]
+    M --> N["输出离线静态目录和 ZIP"]
 ```
 
-标准流程：
+### 5.1 首次生成的确认例外
 
-1. 用户运行启动命令并选择 Vuestic 场景。
-2. 工具启动有界面的 Chromium，并打开场景入口。
-3. 终端显示当前待采集关键点，例如 `K01 Dashboard 首屏`。
-4. 用户在浏览器内手工完成操作。
-5. 用户按 `Ctrl+Shift+Y`；工具立即捕获当前页面。
-6. 浏览器页面不弹出会影响 DOM 的提示，终端打印保存结果并推进到下一个关键点。
-7. 用户也可在终端输入 `capture K03` 主动捕获指定关键点。
-8. 用户输入 `finish` 后，工具关闭浏览器并生成本次运行摘要。
+首次生成前，Codex 必须先展示识别摘要并等待确认；摘要包括：
 
-## 8. 功能需求
+- HTML 文件名对应的页面清单；
+- 识别出的路由、菜单、面包屑和页面关系；
+- 计划使用的 Element Plus 组件；
+- 复用的数据、字段、文案和业务术语；
+- 计划实现的主要交互；
+- 需要下载或替代的远程视觉资源；
+- 无法从 HTML 确定、需要业务分析师补充的事项。
 
-### FR-01 有界面浏览器
+确认后生成当前基线中的全部页面。后续自然语言修改无需修改前确认，Codex 直接实施并在完成后展示 diff、验收结果和交付包位置。
 
-- 使用 `chromium.launchPersistentContext()` 或等价 Playwright API。
-- `headless` 必须为 `false`。
-- 默认使用隔离的临时或项目级浏览器 profile。
-- MVP 限制为单窗口、单业务标签页；若页面打开新标签，终端必须提示用户选择或返回主标签。
-- 浏览器关闭时，CLI 应安全退出并保存已完成的运行摘要。
+## 6. 仓库产物与目录契约
 
-### FR-02 场景配置
-
-场景配置至少包含：
-
-- 场景 ID 和版本。
-- 起始 URL。
-- 关键点 ID、名称、顺序和可选断言。
-- 输出目录。
-- 捕获模式：`exact` 或 `settled`。
-- 需要忽略或脱敏的 selector。
-
-默认模式为 `exact`。`settled` 模式等待 DOM 连续 300 ms 无变更，最多等待 2 秒，并同时记录用户请求时间与实际捕获时间。
-
-### FR-03 页面快捷键捕获
-
-- 默认快捷键为 `Ctrl+Shift+Y`，允许通过配置修改。
-- 使用 Playwright 的 `browserContext.exposeBinding()` 与 `addInitScript()` 建立页面到 Node.js 的捕获通道。
-- 快捷键监听脚本不得向业务 DOM 插入按钮、浮层或提示节点。
-- 在快捷键事件内先同步克隆并生成 HTML 字符串，再把已经冻结的数据交给 Node.js，避免异步传输期间 SPA 继续变化。
-- 快捷键冲突时，应在启动阶段提示用户修改配置。
-
-### FR-04 终端命令捕获
-
-CLI 至少支持：
-
-- `capture`：捕获当前待采关键点。
-- `capture <keypoint-id>`：捕获指定关键点。
-- `status`：显示 URL、已完成和待完成关键点。
-- `skip <keypoint-id>`：跳过关键点并记录原因。
-- `finish`：结束运行并生成摘要。
-- `quit`：退出；若仍有未保存结果需二次确认。
-
-终端触发通过 `page.evaluate()` 执行同一套捕获函数。该方式允许轻微调度延迟，并作为快捷键不可用时的备用入口。
-
-### FR-05 DOM 冻结与状态固化
-
-捕获函数必须：
-
-1. 保存原文档 doctype。
-2. 同步执行 `document.documentElement.cloneNode(true)`。
-3. 按相同 DOM 顺序配对原节点和克隆节点。
-4. 将下列 property 状态写回克隆体：
-   - `input.value`；
-   - checkbox/radio 的 `checked`；
-   - `textarea.value`；
-   - `option.selected`；
-   - `details`、`dialog` 等打开状态；
-   - 图片的 `currentSrc`；
-   - `contenteditable` 当前 DOM 内容。
-5. 记录页面和可滚动容器的滚动位置到元数据。
-6. 对可读取的 2D canvas 尝试转换为 data URL 图片；失败时保留 canvas 标签并写入告警。
-7. 在 `<head>` 中加入来源、关键点、时间、视口等快照元数据。
-8. 插入正确的 `<base href>` 或将关键资源 URL 绝对化。
-9. 移除原站点脚本、`on*` 内联事件、`javascript:` URL 和 `meta refresh`。
-10. 删除捕获工具自身可能产生的属性或标记。
-
-### FR-06 隐私与安全
-
-- `input[type=password]` 的值必须清空并标记已脱敏。
-- `input[type=file]` 的值和本地文件路径不得写入产物。
-- 不读取或导出 Cookie、Local Storage、Session Storage、IndexedDB。
-- 来源 URL 默认移除 fragment；包含疑似 token、code、key 等查询参数时进行脱敏。
-- 冻结 HTML 默认禁用脚本执行，防止本地打开时原 SPA 重新启动或发起写操作。
-
-### FR-07 产物
-
-每个关键点至少生成：
+建议目录：
 
 ```text
-artifacts/<run-id>/
-  K01_dashboard.html
-  K01_dashboard.png
-  K01_dashboard.json
-  K02_users-filtered.html
-  ...
-  run-summary.json
+repo/
+  recorder/                    # Playwright 录制与 HTML 捕获工具
+  skills/
+    capture-spa-html/          # 唯一独立 Skill：启动和指导录制
+    element-plus/              # 固定版本的 Element Plus Skills 子集/镜像
+  baseline/
+    pages/                     # 最新只读 HTML 基线
+      用户管理.html
+      订单详情.html
+  prototype/                   # Vue 3 + TS + Vite + Element Plus 原型源码
+  validation/                  # 自动验证配置与报告
+  delivery/                    # dist 与离线 ZIP
+  docs/
+    PRD.md
+    archive/
 ```
 
-HTML 是主交付物；PNG 是捕获瞬间的视觉真值；JSON 至少包含：
+约束：
 
-- `runId`、`scenarioId`、`scenarioVersion`；
-- `keypointId`、`keypointName`；
-- `requestedAt`、`capturedAt`、`savedAt`；
-- 原始 URL 和脱敏后的 URL；
-- viewport、DPR、scroll 位置；
-- DOM 节点数、HTML 字节数；
-- canvas、iframe、Shadow DOM 和资源告警；
-- HTML 与截图文件的 SHA-256。
+- `baseline/pages/*.html` 只允许录制 Skill 写入；后续 AI 只读。
+- 页面 HTML 文件名直接作为页面名称和默认路由推断依据。
+- `prototype/` 是自然语言生成和修改的唯一代码目标。
+- `delivery/` 是派生产物，可以重复构建。
+- 基线是否进入 Git、其中包含何种业务数据，由用户自行决定。
 
-文件名冲突不得覆盖旧文件，应追加递增序号或唯一时间戳。
+## 7. HTML 录制 Skill
 
-### FR-08 状态反馈与错误处理
+### FR-REC-01 启动
 
-- 每次捕获成功后，终端打印关键点、URL、文件路径、大小和耗时。
-- 页面导航中、页面已关闭或序列化失败时，不得生成半文件。
-- 单次失败不应关闭浏览器，用户可以重试。
-- 检测到跨域 iframe、closed/unavailable Shadow DOM、tainted canvas 时，结果标记为 `completed_with_warnings`。
-- 超过 150,000 个 DOM 节点或 25 MB 原始 HTML 时标记 `oversized`，MVP 可中止并提示后续使用分块策略。
+- 用户以自然语言调用 Skill 并提供目标 URL。
+- Skill 自动执行 Node、Playwright/系统 Chrome 和目录写权限预检。
+- 使用隔离临时 profile 启动 headed Chromium。
+- 用户可在浏览器中手工登录；工具不复用日常 Chrome profile。
+- 目标 URL 仅用于本次会话，不写入项目配置。
 
-## 9. 技术方案
+### FR-REC-02 捕获入口与命名
 
-### 9.1 技术栈
+三个入口调用同一个捕获实现：
 
-- Node.js 20 或更高版本。
-- TypeScript。
-- Playwright 与 Playwright Test。
-- Node.js `readline` 实现交互式终端，避免引入不必要的 CLI 框架。
-- Node.js `fs/promises` 与 `crypto` 负责落盘和摘要。
+- 页面 **Capture HTML** 按钮：使用当前 `document.title`；
+- 页面获得焦点时按 `Ctrl+Shift+Y`：使用当前 `document.title`；
+- 终端 `capture <名称>`：使用显式名称；省略名称时使用当前标题。
 
-### 9.2 模块划分
+标题或名称转换为安全文件名。相同名称直接原子覆盖，不询问、不保留历史；不同名称形成不同页面基线。
 
-| 模块 | 职责 |
-| --- | --- |
-| CLI Runner | 解析参数、显示关键点、接收终端命令、管理运行状态 |
-| Browser Session | 启动/关闭 Chromium，维护当前业务页面 |
-| Capture Bridge | 注入快捷键监听和页面到 Node.js 的 binding |
-| DOM Serializer | 同步克隆 DOM、固化 property、清理脚本、生成 HTML |
-| Artifact Writer | 原子写入 HTML/PNG/JSON，生成 hash 和唯一文件名 |
-| Validator | 重开 HTML，执行 DOM、状态、脚本和截图检查 |
-| Scenario Provider | 加载 Vuestic 场景和关键点断言 |
+### FR-REC-03 HTML 内容
 
-### 9.3 捕获时序
+- 保存 doctype 和深克隆后的 `document.documentElement`。
+- 固化 input、textarea、select、checked、details/dialog、contenteditable、当前图片地址和滚动位置。
+- 保留 DOM、CSS class、业务数据、页面语料和外部 CSS/图片/字体地址。
+- 不下载、不内联页面资源。
+- 删除 `script`、内联 `on*`、`javascript:` URL 和 meta refresh，使文件成为静态参考。
+- 不保存 cookies、Web Storage、IndexedDB 或浏览器 profile。
+- 工具不进行业务数据脱敏、隐私校验或 Git 提交判断。
+- 每次 capture 只生成一个 HTML，不生成 JSON、PNG、截图、视频或操作记录。
 
-页面快捷键模式：
+### FR-REC-04 会话结束
 
-1. `keydown` 事件到达页面注入脚本，记录 `requestedAt`。
-2. 页面同步克隆并固化 DOM，记录 `capturedAt`。
-3. 调用 Playwright binding，将冻结后的 HTML 和元数据传给 Node.js。
-4. Node.js 截取当前页面截图。
-5. Artifact Writer 先写临时文件，完成后原子重命名。
-6. CLI 输出结果并推进关键点。
+- `finish` 正常关闭并保留所有已完成 capture。
+- 用户直接关闭浏览器时，CLI 恢复性结束；已成功写入的基线不得损坏。
+- 单次捕获失败不得删除其他页面基线。
 
-终端模式在第 1 步后通过 `page.evaluate()`调用同一序列化函数，其余流程一致。
+## 8. 原型生成与修改
 
-### 9.4 为什么不使用浏览器扩展或 CDP 附着日常 Chrome
+### FR-PROTO-01 技术栈
 
-- 本方案已经能通过 Playwright 注入快捷键和读取完整 DOM，无需维护扩展 manifest、权限和安装流程。
-- Vuestic Admin 不需要登录，因此没有复用用户日常 profile 的必要。
-- 直接附着日常 Chrome 需要远程调试端口和独立 user-data-dir，环境配置更复杂，也扩大了误读私人标签页和登录状态的风险。
-- Playwright 自己启动浏览器更容易固定版本、视口和测试环境。
+- Vue 3；
+- TypeScript；
+- Vite；
+- Element Plus；
+- Vue Router Hash 模式；
+- 不使用 Pinia；状态放在页面模块或轻量 composables；
+- 模拟数据仅存在内存中，刷新后恢复初始值。
 
-## 10. 产物语义
+### FR-PROTO-02 Element Plus Skills
 
-### 10.1 HTML 的定义
+仓库固定所需 Element Plus Skills 版本，生成时按页面需要加载。MVP 至少覆盖：
 
-HTML 表示用户触发关键点时已经挂载到 DOM 的静态状态，包括文本、属性和经过补写的表单状态。
+- quickstart、components overview、theming；
+- layout、color、typography、border 等设计规范；
+- menu、breadcrumb、button、input、select、form；
+- table、pagination、descriptions、tabs；
+- dialog、drawer、message、notification、popconfirm；
+- date picker、checkbox、radio、switch、upload 等常见业务组件。
 
-它不是：
+来源为 [jiaiyan/element-plus-skills](https://github.com/jiaiyan/element-plus-skills)。该仓库声明包含 77 个组件 Skill、5 个设计规范 Skill 和 6 个基础 Skill；具体纳入内容在实施时锁定 commit，并保留上游 MIT 许可文件。
 
-- 原始服务器响应；
-- Vue 应用内存快照；
-- 可继续运行的完整 SPA；
-- 像素级网页录像；
-- 默认离线网页包。
+### FR-PROTO-03 风格、数据和语料
 
-### 10.2 联网要求
+- 组件结构必须优先使用 Element Plus，不能用任意 div 重造已有组件。
+- 原系统风格优先于 Element Plus 默认视觉；通过主题变量和局部 CSS 还原色彩、间距、边框、字体和布局。
+- 页面数据、字段、枚举值、按钮文案、提示语和业务术语尽量复用基线内容。
+- 全新页面自动选择业务和结构最接近的基线页面，继承其导航、布局和术语。
+- 可访问且允许复用的远程图片、图标和字体，在生成阶段下载到 `prototype` 本地 assets；无法获取的资源使用 Element Plus 图标或本地占位资源替换。
+- 用户负责判断资源是否允许复用。
 
-MVP 允许 HTML 通过绝对 URL 加载原网站 CSS、图片和字体。因此：
+### FR-PROTO-04 页面和交互
 
-- 联网重新打开时，应尽可能保持原有静态外观。
-- 断网时只保证 HTML 结构和内联内容存在，不保证完整样式和图片。
-- “单 HTML 完全离线”作为二期资源内联能力评估，不阻塞 MVP。
+- 首次生成覆盖全部 HTML 基线页面。
+- 尽量保持原系统 URL 路由、菜单、面包屑和页面层级。
+- 支持导航、查询筛选、分页、表单校验、增删改、弹窗、状态切换、成功和失败反馈。
+- 复杂后端规则以确定性的前端模拟实现，不调用真实 API。
+- 新需求可同时修改已有页面并新增页面；新增页面必须接入菜单、Hash 路由及必要交互。
 
-## 11. 自动验证方案
+### FR-PROTO-05 新基线合并
 
-### 11.1 验证流程
+重新录制不会自动覆盖原型。Codex 应对比最新 HTML 基线与当前原型，列出受影响页面和潜在冲突，经用户确认后再合并，并尽量保留已经确认的新需求改动。
 
-1. 捕获瞬间保存参考截图和 ground-truth JSON。
-2. 使用新的 Playwright page 打开生成的 HTML。
-3. 断言 HTML 可解析、doctype 存在且没有截断。
-4. 对场景配置中的 selector 比较文本、属性和表单状态。
-5. 断言冻结 HTML 中不存在可执行的站点脚本和内联事件。
-6. 在联网模式下截图并与参考截图比较；动态时间、动画和 canvas 区域允许 mask。
-7. 扫描产物，确认测试密码、文件路径和伪造 token 未泄漏。
-8. 每个关键点重复采集，汇总成功率和耗时。
+## 9. 自动验证
 
-### 11.2 验收指标
+每次首次生成或自然语言修改后执行：
+
+1. TypeScript 类型检查；
+2. production build；
+3. Chrome 和 Edge 目标下的关键交互 smoke test；
+4. 页面加载失败、控制台错误和未处理异常检查；
+5. 录制时固定桌面视口下的横向/纵向异常溢出检查；
+6. 主要控件遮挡、不可点击和空白页面检查；
+7. Hash 路由直接进入和刷新检查；
+8. 断网情况下静态资源完整性检查；
+9. `file://` 双击打开验证；
+10. ZIP 内容与解压后入口验证。
+
+不自动重放原系统流程，不执行基线截图视觉差异。视觉风格和业务正确性由业务分析师对照原系统人工确认。
+
+验证失败时，Codex 应继续修复至通过，或明确报告无法自动解决的业务歧义。默认不提交 Git；只有用户明确要求才 commit。
+
+## 10. 离线交付
+
+### FR-DEL-01 产物
+
+交付包为多文件静态站点：
+
+```text
+prototype-offline.zip
+  index.html
+  assets/
+  ...
+```
+
+### FR-DEL-02 运行约束
+
+- 用户解压后直接双击 `index.html`。
+- 不要求 Node.js、终端、HTTP 服务或联网。
+- 所有运行时 JS、CSS、Element Plus、字体、图标、图片和模拟数据包含在 ZIP 中。
+- 使用相对资源路径和 Hash 路由。
+- 构建结果不得依赖浏览器在 `file://` 下禁止的 ES Module/CORS 行为；实现阶段必须选定并验证兼容构建策略。
+- 支持公司桌面环境最新版 Chrome 和 Edge。
+
+## 11. MVP 基准系统选型
+
+### 11.1 候选比较
+
+| 候选 | Vue 3 + Element Plus | 页面/功能覆盖 | 本地数据与登录 | 维护与许可 | 判断 |
+| --- | --- | --- | --- | --- | --- |
+| [`pure-admin/vue-pure-admin`](https://github.com/pure-admin/vue-pure-admin) | 是 | 表格、Schema 表单、Dialog 表单、账号设置、系统 CRUD 和多层导航 | 仓库内置登录及动态路由 mock，不依赖真实后端；登录 mock 不校验密码 | MIT；`v7.0.0` 发布于 2026-04-07，之后仍有提交 | **推荐**：页面覆盖、本地确定性和维护活跃度最均衡 |
+| [`youlaitech/vue3-element-admin`](https://github.com/youlaitech/vue3-element-admin) | 是 | Dashboard、个人中心，以及系统配置、部门、字典、菜单、角色、租户、用户等 CRUD | 可启用开发环境 mock，使用本地演示账号 | MIT；2026-07/08 仍有提交 | 维护活跃，但更偏完整企业权限系统，作为录制基准略重 |
+| [`Daymychen/art-design-pro`](https://github.com/Daymychen/art-design-pro) | 是 | Dashboard、表单、数据展示、系统、设置、主题与导航示例 | 前端权限模式可用，但开发 API 默认依赖远程 mock | MIT；`v3.0.2` 发布于 2026-03-15 | 视觉质量较好，但纯本地确定性弱于前两项 |
+| [`kailong321200875/vue-element-plus-admin`](https://github.com/kailong321200875/vue-element-plus-admin) | 是 | Dashboard、组件、示例、个人中心、主题、权限和动态菜单 | 内置 Mock Server；公开演示账号 `admin/admin` | MIT；最新正式版 `v2.10.0` 发布于 2025-01-09 | 功能合适，但维护新鲜度弱于前三项 |
+
+### 11.2 选定方案
+
+MVP 录制基准选用 [`pure-admin/vue-pure-admin`](https://github.com/pure-admin/vue-pure-admin)，锁定 [`v7.0.0`](https://github.com/pure-admin/vue-pure-admin/releases/tag/v7.0.0)。官方仓库明确使用 Vue 3、Vite、TypeScript 和 Element Plus；包含 [`mock/`](https://github.com/pure-admin/vue-pure-admin/tree/v7.0.0/mock) 下的登录、动态路由和系统数据，并采用 MIT 许可。该版本要求 Node `^20.19.0 || >=22.13.0`、pnpm `>=9`。
+
+MVP 默认保留其本地 mock 登录；登录只属于基准站自身页面，不进入捕获工具的流程或校验。若实施时需要零点击进入，可只在固定基准副本中预置本地认证状态，不把该改造带入通用录制工具。基准录制至少覆盖：仪表盘/导航、列表与查询、表单、详情、弹窗编辑、设置或主题页面。
+
+## 12. MVP 端到端验收场景
+
+1. 自然语言调用录制 Skill 并传入本地基准系统 URL。
+2. 用户在有界面 Chromium 中访问至少 5 个不同页面。
+3. 分别使用按钮、快捷键和终端 capture；验证默认标题命名、显式命名和同名覆盖。
+4. 验证基线目录只包含最新 HTML：无截图、JSON、视频或轨迹文件。
+5. Codex 首次生成前输出完整识别摘要，用户确认后生成所有基线页面。
+6. 原型使用 Vue 3、TypeScript、Vite、Element Plus 和 Hash Router，且不使用 Pinia 或真实 API。
+7. 向 Codex 提出一条自然语言需求，同时包含：
+   - 在已有列表页增加查询条件、表格列或编辑字段；
+   - 新增一个相关业务页面，并接入菜单、路由和交互。
+8. Codex 直接修改当前原型，完成后展示 diff 和验证结果。
+9. 所有自动验证通过，输出完全离线 ZIP。
+10. 在断网的 Chrome 和 Edge 中解压并双击 `index.html`，主要页面与交互可用。
+11. 业务分析师人工确认页面风格、数据语料与需求表达符合预期。
+
+## 13. 验收指标
 
 | 指标 | MVP 门槛 |
 | --- | ---: |
-| 四个关键点功能通过率 | 每个关键点 20/20 次 |
-| 长期捕获成功率目标 | ≥ 99% |
-| 快捷键到同步克隆开始 p95 | ≤ 200 ms |
-| 50,000 节点以内 DOM 序列化 p95 | ≤ 1 s |
-| 单个关键点全部产物保存 p95 | ≤ 3 s |
-| 指定文本、属性和表单状态一致率 | 100% |
-| HTML 解析成功率 | 100% |
-| 产物被截断 | 0 |
-| 冻结 HTML 中站点可执行脚本 | 0 |
-| password/file 测试值泄漏 | 0 |
-| 文件覆盖或关键点串台 | 0 |
-| 联网回放视觉差异 | 动态区 mask 后差异像素 ≤ 5% |
+| 任意时刻 capture 成功率 | 20/20 |
+| 单次 capture 产物 | 恰好 1 HTML |
+| 同名覆盖 | 10/10，无历史副本和半文件 |
+| 截图/轨迹/JSON/PNG 产物 | 0 |
+| 首次生成页面覆盖率 | 基线页面 100% |
+| Element Plus 组件合规率 | 适用组件 100% 使用组件库 |
+| 基线字段和业务语料复用 | 人工抽查通过 |
+| 必需交互 smoke test | 100% 通过 |
+| TypeScript/build/console error | 通过 / 通过 / 0 |
+| 固定桌面视口溢出或关键遮挡 | 0 |
+| 离线网络请求 | 0 必需运行时请求 |
+| Chrome/Edge `file://` 启动 | 2/2 通过 |
+| 自然语言修改已有页与新增页 | 两类均验收通过 |
 
-## 12. 风险与处理
+## 14. 风险与处理
 
-| 风险 | 影响 | 处理方式 |
-| --- | --- | --- |
-| 页面在触发后继续变化 | 捕获内容偏离关键时点 | 快捷键脚本先同步克隆，再异步传输 |
-| 工具栏或终端切焦导致弹窗关闭 | 丢失瞬时 UI | 默认在页面内使用快捷键，不点击浏览器工具栏 |
-| 表单值只存在于 property | `outerHTML` 中值缺失 | 序列化前显式写回克隆节点 |
-| canvas/WebGL 不属于 DOM | HTML 重新打开时画面空白 | 可读 canvas 转图片；否则保存截图并告警 |
-| Shadow DOM 不在 `outerHTML` | 组件内容缺失 | 检测 open shadow root；MVP 告警，二期评估声明式 Shadow DOM |
-| 跨域 iframe 受同源策略限制 | iframe 内部 DOM 不可读 | 保留 iframe 标签、保存截图并告警 |
-| 站点 CSS/图片变化或失效 | 历史 HTML 外观变化 | MVP 接受；二期评估资源内联 |
-| 原脚本重新运行 | 覆盖快照或产生网络副作用 | 删除脚本、事件属性和 refresh |
-| 多标签页定位不清 | 捕获错误页面 | MVP 限制单业务标签页；新标签出现时暂停并提示 |
-| Vuestic Demo 改版 | selector 失效 | 场景文件版本化；失败时输出候选节点和人工更新提示 |
+| 风险 | 处理 |
+| --- | --- |
+| HTML 无截图，视觉信息不完整 | 保留 class 和远程资源引用；AI 对照原系统，最终人工确认 |
+| 远程资源在生成时不可下载 | 使用 Element Plus 图标或本地占位资源，并在交付说明中列出 |
+| 同名页面误覆盖 | 文件名由用户标题或显式名称决定；工具遵循简单、可预期的覆盖语义 |
+| 用户捕获敏感业务数据 | 明确由用户自行负责；工具不承诺脱敏或合规检查 |
+| 新基线与原型中的新需求冲突 | 先列差异和冲突，经用户确认后合并 |
+| `file://` 多文件构建受浏览器限制 | 实施早期制作最小技术探针，同时在 Chrome/Edge 验证 |
+| Element Plus Skills 上游变化 | 仓库内固定 commit 和许可，生成时按需加载 |
+| 基准系统登录或依赖漂移 | 锁定 commit、依赖锁文件和本地登录跳过补丁 |
 
-## 13. 里程碑
+## 15. 分阶段实施路线
 
-### M1：最小可运行链路
+### 阶段 1：录制能力收敛
 
-- 启动有界面 Chromium。
-- 打开 Vuestic Dashboard。
-- 终端 `capture K01` 保存 `page.content()` 基线和截图。
-- 建立产物目录和运行摘要。
+- 将现有 Skill 调整为只保存 HTML。
+- 改为标题/显式名称命名和同名原子覆盖。
+- 删除或停用截图、操作轨迹、页面识别、脱敏和多版本相关设计。
+- 支持自然语言 URL 启动、`finish` 与关闭浏览器恢复性结束。
 
-### M2：准确关键点捕获
+退出条件：三个入口、标题命名、显式命名、同名覆盖及 HTML-only 测试全部通过。
 
-- 页面快捷键和 Playwright binding。
-- 自定义 DOM Serializer。
-- 表单状态固化、脚本清理、隐私脱敏。
-- 完成 K01–K04 场景。
+### 阶段 2：基准系统与仓库结构
 
-### M3：自动验证
+- 锁定基准系统 commit 和依赖。
+- 建立 `baseline/`、`prototype/`、`validation/`、`delivery/` 目录。
+- 将 Element Plus Skills 所需子集及许可固定到仓库。
+- 完成 5 类页面的本地录制样本。
 
-- 重开 HTML 并校验 selector。
-- 截图对比和动态区 mask。
-- 20 次重复捕获与性能报告。
+退出条件：基准系统可重复启动，基线 HTML 齐全，Skill 可从自然语言完成录制。
 
-### M4：可选增强
+### 阶段 3：首次交互原型
 
-- 资源内联与离线单 HTML。
-- open Shadow DOM 和同源 iframe 深度捕获。
-- 多标签页选择。
-- 更多 Vue SPA 场景。
+- 创建 Vue 3 + TypeScript + Vite + Element Plus + Hash Router 工程。
+- Codex 直接读取全部基线并生成所有页面。
+- 建立内存模拟数据、导航和主要交互。
+- 实现主题变量和局部样式以贴近原系统。
 
-## 14. MVP 完成定义
+退出条件：全部基线页面可访问，主要交互可演示，刷新恢复初始数据。
 
-满足以下条件即认为 MVP 完成：
+### 阶段 4：自然语言迭代与验证
 
-1. 一个命令可启动有界面 Chromium 并打开 Vuestic Admin。
-2. 用户可以全程手工操作页面。
-3. 页面快捷键和终端命令均能触发关键点捕获。
-4. K01–K04 均生成 HTML、PNG 和 JSON。
-5. 表单值、勾选项、弹窗状态和当前路由在 HTML 中正确固化。
-6. 产物不包含密码、文件路径或可执行的原站点脚本。
-7. 自动验证满足第 11.2 节门槛。
-8. 所有不可完整序列化的内容均在元数据和终端中有明确告警。
+- 验收“修改已有页面 + 新增页面”的组合需求。
+- 建立 typecheck、build、Chrome/Edge 交互、溢出和控制台检查。
+- 新基线进入时支持差异说明、确认和保留已有需求改动。
+
+退出条件：自然语言改动正确落地，自动检查全部通过且不自动 commit。
+
+### 阶段 5：完全离线交付
+
+- 下载或替换原型使用的远程资源。
+- 实现相对路径、Hash Router 和 `file://` 兼容打包。
+- 生成静态目录与 ZIP，并在断网 Chrome/Edge 双击验收。
+
+退出条件：用户无 Node、无服务、无网络即可打开并完成核心交互。
+
+## 16. MVP 完成定义
+
+完成第 12 节完整闭环；所有第 13 节可自动化指标通过；录制 HTML 始终是只读事实基线，原型源码可持续被自然语言修改，且最终 ZIP 已在 Chrome/Edge 的断网 `file://` 环境验证。按本轮“不需要人工干预”指令，主观风格/业务签收由代理对照审阅替代，真实 OS 双击动作不作虚假声明。

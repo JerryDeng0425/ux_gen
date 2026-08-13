@@ -1,82 +1,38 @@
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile, readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
-import { type Browser, type Page } from 'playwright';
-import pixelmatch from 'pixelmatch';
-import { PNG } from 'pngjs';
-import { sha256 } from '../artifacts/hashes.js';
+import type { Browser } from 'playwright';
 import { launchChromium } from '../browser/launch.js';
-import type {
-  ArtifactMetadata,
-  AssertionConfig,
-  KeypointValidationResult,
-  RunSummary,
-  ValidationIssue,
-  ValidationReport
-} from '../types.js';
+import type { HtmlValidationReport, HtmlValidationResult, ValidationIssue } from '../types.js';
 
-async function validateAssertion(page: Page, assertion: AssertionConfig, sourceUrl: string): Promise<string | undefined> {
-  if (assertion.type === 'url') return sourceUrl.includes(assertion.includes) ? undefined : `Source URL does not include ${assertion.includes}`;
-  const locator = page.locator(assertion.selector).first();
-  if (await locator.count() === 0) return `Missing selector ${assertion.selector}`;
-  if (assertion.type === 'exists') return undefined;
-  if (assertion.type === 'text') {
-    const value = await locator.textContent();
-    return value?.includes(assertion.includes) ? undefined : `${assertion.selector} text does not include ${assertion.includes}`;
+async function findHtmlFiles(inputPath: string): Promise<string[]> {
+  const info = await stat(inputPath);
+  if (info.isFile()) return path.extname(inputPath).toLowerCase() === '.html' ? [inputPath] : [];
+  if (!info.isDirectory()) return [];
+  const files: string[] = [];
+  for (const entry of await readdir(inputPath, { withFileTypes: true })) {
+    const child = path.join(inputPath, entry.name);
+    if (entry.isDirectory()) files.push(...await findHtmlFiles(child));
+    else if (entry.isFile() && path.extname(entry.name).toLowerCase() === '.html') files.push(child);
   }
-  if (assertion.type === 'attribute') {
-    const value = await locator.getAttribute(assertion.name);
-    return value === assertion.equals ? undefined : `${assertion.selector}[${assertion.name}] expected ${assertion.equals}, got ${value}`;
-  }
-  if (assertion.type === 'value') {
-    const value = await locator.inputValue();
-    return value === assertion.equals ? undefined : `${assertion.selector} value expected ${assertion.equals}, got ${value}`;
-  }
-  const value = await locator.isChecked();
-  return value === assertion.equals ? undefined : `${assertion.selector} checked expected ${assertion.equals}, got ${value}`;
+  return files.sort();
 }
 
-async function compareScreenshots(page: Page, reference: Buffer, maskSelectors: string[]): Promise<number | undefined> {
-  const replay = await page.screenshot({
-    type: 'png',
-    animations: 'disabled',
-    mask: maskSelectors.map((selector) => page.locator(selector))
-  });
-  const expected = PNG.sync.read(reference);
-  const actual = PNG.sync.read(replay);
-  if (expected.width !== actual.width || expected.height !== actual.height) return undefined;
-  const differingPixels = pixelmatch(expected.data, actual.data, undefined, expected.width, expected.height, { threshold: 0.15 });
-  return differingPixels / (expected.width * expected.height);
-}
-
-async function validateKeypoint(browser: Browser, runDir: string, metadataName: string, visual: boolean): Promise<KeypointValidationResult> {
+async function validateHtmlFile(browser: Browser, filePath: string): Promise<HtmlValidationResult> {
   const issues: ValidationIssue[] = [];
-  let metadata: ArtifactMetadata;
+  let html = '';
   try {
-    metadata = JSON.parse(await readFile(path.join(runDir, metadataName), 'utf8')) as ArtifactMetadata;
+    html = await readFile(filePath, 'utf8');
   } catch (error) {
-    return { keypointId: metadataName, passed: false, issues: [{ severity: 'error', code: 'metadata_invalid', message: String(error), file: metadataName }] };
+    return { file: filePath, passed: false, issues: [{ severity: 'error', code: 'html_unreadable', message: String(error), file: filePath }] };
   }
-  const htmlPath = path.join(runDir, metadata.files.html);
-  const screenshotPath = path.join(runDir, metadata.files.screenshot);
-  let html: string;
-  let screenshot: Buffer;
-  try {
-    [html, screenshot] = await Promise.all([readFile(htmlPath, 'utf8'), readFile(screenshotPath)]);
-  } catch (error) {
-    return { keypointId: metadata.keypointId, passed: false, issues: [{ severity: 'error', code: 'artifact_missing', message: String(error) }] };
-  }
-
-  if (sha256(html) !== metadata.hashes.htmlSha256) issues.push({ severity: 'error', code: 'html_hash_mismatch', message: 'HTML SHA-256 does not match metadata' });
-  if (sha256(screenshot) !== metadata.hashes.screenshotSha256) issues.push({ severity: 'error', code: 'screenshot_hash_mismatch', message: 'Screenshot SHA-256 does not match metadata' });
-  if (!/^<!doctype\s+html/i.test(html.trimStart())) issues.push({ severity: 'error', code: 'doctype_missing', message: 'HTML does not begin with an HTML doctype' });
-  if (!/<\/html>\s*$/i.test(html)) issues.push({ severity: 'error', code: 'html_truncated', message: 'HTML does not end with </html>' });
-
-  const context = await browser.newContext({ viewport: metadata.viewport });
+  if (!/^<!doctype\s+html/i.test(html.trimStart())) issues.push({ severity: 'error', code: 'doctype_missing', message: 'HTML does not begin with an HTML doctype', file: filePath });
+  if (!/<\/html>\s*$/i.test(html)) issues.push({ severity: 'error', code: 'html_truncated', message: 'HTML does not end with </html>', file: filePath });
+  const context = await browser.newContext();
   await context.route('**/*', (route) => route.abort());
   const page = await context.newPage();
   try {
     await page.setContent(html, { waitUntil: 'domcontentloaded' });
-    const security = await page.evaluate(() => {
+    const inspection = await page.evaluate(() => {
       const inlineEvents = Array.from(document.querySelectorAll('*')).flatMap((element) =>
         Array.from(element.attributes).filter((attribute) => attribute.name.toLowerCase().startsWith('on')).map((attribute) => `${element.tagName}.${attribute.name}`)
       );
@@ -84,61 +40,71 @@ async function validateKeypoint(browser: Browser, runDir: string, metadataName: 
         Array.from(element.attributes).some((attribute) => /^\s*javascript:/i.test(attribute.value))
       ).length;
       const refresh = Array.from(document.querySelectorAll('meta[http-equiv]')).filter((element) => (element.getAttribute('http-equiv') ?? '').toLowerCase() === 'refresh').length;
-      const leakedPasswords = Array.from(document.querySelectorAll('input[type=password]')).filter((element) => (element.getAttribute('value') ?? '') !== '').length;
-      const leakedFiles = Array.from(document.querySelectorAll('input[type=file]')).filter((element) => element.hasAttribute('value')).length;
-      return { scripts: document.scripts.length, inlineEvents, javascriptUrls, refresh, leakedPasswords, leakedFiles };
+      const requiredMeta = [
+        'spa-snapshot-source',
+        'spa-snapshot-requested-at',
+        'spa-snapshot-captured-at',
+        'spa-snapshot-session-id',
+        'spa-snapshot-capture-id',
+        'spa-snapshot-saved-at',
+        'spa-snapshot-route',
+        'spa-snapshot-title',
+        'spa-snapshot-viewport',
+        'spa-snapshot-dpr',
+        'spa-snapshot-node-count',
+        'spa-snapshot-warning-count'
+      ];
+      const missingMeta = requiredMeta.filter((name) => !document.querySelector(`meta[name="${name}"]`)?.getAttribute('content'));
+      const warnings = Array.from(document.querySelectorAll('meta[name="spa-snapshot-warning"]')).map((meta) => meta.getAttribute('content') ?? 'capture warning');
+      return {
+        scripts: document.scripts.length,
+        inlineEvents,
+        javascriptUrls,
+        refresh,
+        missingMeta,
+        warnings,
+        toolHosts: document.querySelectorAll('[data-spa-snapshot-tool]').length
+      };
     });
-    if (security.scripts > 0) issues.push({ severity: 'error', code: 'script_present', message: `${security.scripts} script elements found` });
-    if (security.inlineEvents.length > 0) issues.push({ severity: 'error', code: 'inline_event_present', message: `${security.inlineEvents.length} inline event handlers found` });
-    if (security.javascriptUrls > 0) issues.push({ severity: 'error', code: 'javascript_url_present', message: `${security.javascriptUrls} javascript URLs found` });
-    if (security.refresh > 0) issues.push({ severity: 'error', code: 'meta_refresh_present', message: 'Meta refresh found' });
-    if (security.leakedPasswords > 0 || security.leakedFiles > 0) issues.push({ severity: 'error', code: 'sensitive_input_value', message: 'Password or file input value leaked' });
-    if (/(?:[A-Za-z]:\\Users\\|\/home\/[^/]+\/)/i.test(html)) issues.push({ severity: 'error', code: 'local_path_leak', message: 'Possible local user path found' });
-    if (/[?&](?:token|code|key|secret|password|auth|session)=(?!%5BREDACTED%5D|\[REDACTED\])/i.test(html)) issues.push({ severity: 'error', code: 'sensitive_query_leak', message: 'Sensitive query parameter value found' });
-
-    for (const assertion of metadata.assertions) {
-      const failure = await validateAssertion(page, assertion, metadata.route ?? metadata.sanitizedUrl);
-      if (failure) issues.push({ severity: 'error', code: 'assertion_failed', message: failure });
-    }
-    for (const warning of metadata.warnings) issues.push({ severity: 'warning', code: warning.code, message: warning.message });
-    if (visual) {
-      await context.unroute('**/*');
-      await page.setContent(html, { waitUntil: 'networkidle', timeout: 30_000 });
-      const ratio = await compareScreenshots(page, screenshot, metadata.maskSelectors);
-      if (ratio === undefined) issues.push({ severity: 'warning', code: 'visual_size_mismatch', message: 'Replay screenshot dimensions differ from reference' });
-      else if (ratio > 0.05) issues.push({ severity: 'error', code: 'visual_diff', message: `Visual difference ${(ratio * 100).toFixed(2)}% exceeds 5%` });
-      return { keypointId: metadata.keypointId, passed: !issues.some((issue) => issue.severity === 'error'), issues, visualDiffRatio: ratio };
-    }
+    if (inspection.scripts > 0) issues.push({ severity: 'error', code: 'script_present', message: `${inspection.scripts} script elements found`, file: filePath });
+    if (inspection.inlineEvents.length > 0) issues.push({ severity: 'error', code: 'inline_event_present', message: `${inspection.inlineEvents.length} inline event handlers found`, file: filePath });
+    if (inspection.javascriptUrls > 0) issues.push({ severity: 'error', code: 'javascript_url_present', message: `${inspection.javascriptUrls} javascript URLs found`, file: filePath });
+    if (inspection.refresh > 0) issues.push({ severity: 'error', code: 'meta_refresh_present', message: 'Meta refresh found', file: filePath });
+    if (inspection.missingMeta.length > 0) issues.push({ severity: 'error', code: 'metadata_missing', message: `Missing metadata: ${inspection.missingMeta.join(', ')}`, file: filePath });
+    if (inspection.toolHosts > 0) issues.push({ severity: 'error', code: 'capture_control_present', message: 'Capture control leaked into saved DOM', file: filePath });
+    for (const warning of inspection.warnings) issues.push({ severity: 'warning', code: 'capture_warning', message: warning, file: filePath });
   } catch (error) {
-    issues.push({ severity: 'error', code: 'html_parse_failed', message: error instanceof Error ? error.message : String(error) });
+    issues.push({ severity: 'error', code: 'html_parse_failed', message: error instanceof Error ? error.message : String(error), file: filePath });
   } finally {
     await context.close();
   }
-  return { keypointId: metadata.keypointId, passed: !issues.some((issue) => issue.severity === 'error'), issues };
+  return { file: filePath, passed: !issues.some((issue) => issue.severity === 'error'), issues };
 }
 
-export async function validateRun(runDirInput: string, options: { visual?: boolean; writeReport?: boolean } = {}): Promise<ValidationReport> {
-  const runDir = path.resolve(runDirInput);
-  const summary = JSON.parse(await readFile(path.join(runDir, 'run-summary.json'), 'utf8')) as RunSummary;
+export async function validateHtml(inputPath: string): Promise<HtmlValidationReport> {
+  const absolutePath = path.resolve(inputPath);
+  const files = await findHtmlFiles(absolutePath);
+  if (files.length === 0) {
+    return {
+      validatedAt: new Date().toISOString(),
+      path: absolutePath,
+      passed: false,
+      results: [{ file: absolutePath, passed: false, issues: [{ severity: 'error', code: 'html_missing', message: 'No HTML files found', file: absolutePath }] }]
+    };
+  }
   const browser = await launchChromium({ headless: true });
   try {
-    const results: KeypointValidationResult[] = [];
-    for (const record of summary.keypoints) {
-      if (!record.artifactMetadata) {
-        if (record.status !== 'skipped') results.push({ keypointId: record.id, passed: false, issues: [{ severity: 'error', code: 'artifact_reference_missing', message: `No metadata for ${record.status} keypoint` }] });
-        continue;
-      }
-      results.push(await validateKeypoint(browser, runDir, record.artifactMetadata, options.visual ?? false));
-    }
-    const report: ValidationReport = {
-      runId: summary.runId,
+    const results: HtmlValidationResult[] = [];
+    for (const file of files) results.push(await validateHtmlFile(browser, file));
+    return {
       validatedAt: new Date().toISOString(),
-      passed: results.length > 0 && results.every((result) => result.passed),
+      path: absolutePath,
+      passed: results.every((result) => result.passed),
       results
     };
-    if (options.writeReport !== false) await writeFile(path.join(runDir, 'validation-report.json'), `${JSON.stringify(report, null, 2)}\n`);
-    return report;
   } finally {
     await browser.close();
   }
 }
+
+export const validateRun = validateHtml;
